@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Pemasukan;
 use App\Models\Pengeluaran;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 
 class HomeController extends Controller
@@ -13,29 +14,32 @@ class HomeController extends Controller
      */
     public function index()
     {
-        // Ambil semua data pemasukan & pengeluaran, urutkan berdasarkan tanggal
-        $pemasukan = Pemasukan::orderBy('tanggal', 'asc')->get();
-        $pengeluaran = Pengeluaran::orderBy('tanggal', 'asc')->get();
+        // Ambil data pemasukan
+        $pemasukan = Pemasukan::select('tanggal', 'nominal', 'keterangan')
+            ->get()
+            ->map(function ($item) {
+                return [
+                    'tanggal' => Carbon::parse($item->tanggal)->format('Y-m-d'),
+                    'nominal' => $item->nominal,
+                    'keterangan' => $item->keterangan
+                ];
+            });
 
-        // Gabungkan tanggal unik dari pemasukan & pengeluaran
-        $allDates = $pemasukan->pluck('tanggal')->merge($pengeluaran->pluck('tanggal'))->unique()->sort();
+        // Ambil data pengeluaran
+        $pengeluaran = Pengeluaran::select('tanggal', 'nominal', 'keterangan')
+            ->get()
+            ->map(function ($item) {
+                return [
+                    'tanggal' => Carbon::parse($item->tanggal)->format('Y-m-d'),
+                    'nominal' => -abs($item->nominal), // Buat negatif
+                    'keterangan' => $item->keterangan
+                ];
+            });
 
-        $labels = [];  // Tanggal
-        $dataPemasukan = [];
-        $dataPengeluaran = [];
+        // Gabungkan data pemasukan & pengeluaran
+        $transaksi = collect($pemasukan)->merge($pengeluaran)->sortBy('tanggal')->values();
 
-        foreach ($allDates as $tanggal) {
-            $labels[] = date('d M Y', strtotime($tanggal));
-
-            // Pastikan nilai dalam bentuk angka (integer/float)
-            $totalPemasukan = (int) $pemasukan->where('tanggal', $tanggal)->sum('nominal');
-            $totalPengeluaran = (int) $pengeluaran->where('tanggal', $tanggal)->sum('nominal');
-
-            $dataPemasukan[] = $totalPemasukan;
-            $dataPengeluaran[] = $totalPengeluaran;
-        }
-
-        return view('home.index', compact('labels', 'dataPemasukan', 'dataPengeluaran', 'pemasukan', 'pengeluaran'));
+        return view('home.index', compact('transaksi'));
     }
 
 
